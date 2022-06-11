@@ -21,9 +21,7 @@ the application supports some of the original class functions: new file, save fi
 
 GUI discripttion:
 
-![image](https://user-images.githubusercontent.com/101277239/173196738-9aa1ddfb-5323-47c3-927b-eb48c362aee8.png)
-![image](https://user-images.githubusercontent.com/101277239/173196741-5364b229-10ea-44f1-a421-d82aad2dd649.png)
-![image](https://user-images.githubusercontent.com/101277239/173196744-8fcf29d0-6257-4440-a5a0-ba2e1d01a09c.png)
-![image](https://user-images.githubusercontent.com/101277239/173196752-b40b1586-b270-4054-94d0-27f04e41e205.png)
-![image](https://user-images.githubusercontent.com/101277239/173196754-c87ee4e3-4f25-41cb-858a-ce33fab8fdf7.png)
+![image](https://user-images.githubusercontent.com/101277239/173196825-4386a380-2a1d-4756-ae17-e8995f0ce4fc.png)
+
+
 
