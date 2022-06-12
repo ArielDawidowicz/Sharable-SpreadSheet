@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -9,8 +9,8 @@ namespace SpreadsheetApp
     internal class SharableSpreadSheet
     {
         private String[,] spreadSheet;
-        private Mutex[] rows_mutex;
-        private Mutex[] cols_mutex;
+        private Semaphore[] rows_mutex;
+        private Semaphore[] cols_mutex;
         private Semaphore countersLock;
         private Semaphore resource;
         private long searchers_counter;
@@ -29,8 +29,8 @@ namespace SpreadsheetApp
             numOfRows = nRows;
             concurrentSearchLimit = nUsers;
             spreadSheet = new string[nRows, nCols];
-            cols_mutex = new Mutex[numOfCols];
-            rows_mutex = new Mutex[numOfRows];
+            cols_mutex = new Semaphore[numOfCols];
+            rows_mutex = new Semaphore[numOfRows];
             countersLock = new Semaphore(0, 1);
             countersLock.Release();
             resource = new Semaphore(0, 1);
@@ -39,23 +39,23 @@ namespace SpreadsheetApp
 
             for (int i = 0; i < numOfRows; i++)
             {
-                rows_mutex[i] = new Mutex();
+                rows_mutex[i] = new Semaphore(0, 1);
+                rows_mutex[i].Release();
             }
             for (int i = 0; i < numOfCols; i++)
             {
-                cols_mutex[i] = new Mutex();
+                cols_mutex[i] = new Semaphore(0, 1);
+                cols_mutex[i].Release();
             }
         }
         public String getCell(int row, int col)
         {
-            Console.WriteLine("User[{0}]:Start in cell ({1},{2})", Thread.CurrentThread.ManagedThreadId, row, col);
             if (row < 0 || col < 0 || row >= numOfRows || col >= numOfCols)
                 throw new Exception("Invalid row/col");
             readerRequest();
             rows_mutex[row].WaitOne();
-            Console.WriteLine("User[{0}]:Middle in cell ({1},{2})", Thread.CurrentThread.ManagedThreadId, row, col);
             String cell = spreadSheet[row, col];
-            rows_mutex[row].ReleaseMutex();
+            rows_mutex[row].Release();
             readerRelease();
             return cell;
         }
@@ -64,41 +64,38 @@ namespace SpreadsheetApp
             if (row < 0 || col < 0 || row >= numOfRows || col >= numOfCols)
                 throw new Exception("Invalid row/col");
             readerRequest();
-            cols_mutex[col].WaitOne();
             rows_mutex[row].WaitOne();
+            cols_mutex[col].WaitOne();
             spreadSheet[row, col] = str;
-            cols_mutex[col].ReleaseMutex();
-            rows_mutex[row].ReleaseMutex();
+            cols_mutex[col].Release();
+            rows_mutex[row].Release();
             readerRelease();
         }
 
         // return first cell indexes that contains the string (search from first row to the last row)
         public Tuple<int, int> searchString(String str)
         {
-            Console.WriteLine("User[{0}]:Start searchString ({1})", Thread.CurrentThread.ManagedThreadId, str);
             if (!searcherRequest())
                 return new Tuple<int, int>(-1, -1);
             int row, col;
             Tuple<int, int> position;
             for (int i = 0; i < numOfRows; i++)
             {
+                rows_mutex[i].WaitOne();
                 for (int j = 0; j < numOfCols; j++)
                 {
-                    rows_mutex[i].WaitOne();
-                    cols_mutex[j].WaitOne();
+
                     if (spreadSheet[i, j] == str)
                     {
                         row = i;
                         col = j;
                         position = new Tuple<int, int>(row, col);
-                        rows_mutex[i].ReleaseMutex();
-                        cols_mutex[j].ReleaseMutex();
+                        rows_mutex[i].Release();
                         searcherRelease();
                         return position;
                     }
-                    rows_mutex[i].ReleaseMutex();
-                    cols_mutex[j].ReleaseMutex();
                 }
+                rows_mutex[i].Release();
             }
             searcherRelease();
             return new Tuple<int, int>(-1, -1);
@@ -109,19 +106,12 @@ namespace SpreadsheetApp
         {
             if (row1 < 0 || row2 < 0 || row1 >= numOfRows || row2 >= numOfRows)
                 throw new Exception("Invalid row");
-            Console.WriteLine("User[{0}]:Start ExchangeRows ({1},{2})", Thread.CurrentThread.ManagedThreadId, row1, row2);
             writerRequest();
             for (int i = 0; i < numOfCols; i++)
             {
-                rows_mutex[row1].WaitOne();
-                rows_mutex[row2].WaitOne();
-                cols_mutex[i].WaitOne();
                 String s = spreadSheet[row1, i];
                 spreadSheet[row1, i] = spreadSheet[row2, i];
                 spreadSheet[row2, i] = s;
-                rows_mutex[row1].ReleaseMutex();
-                rows_mutex[row2].ReleaseMutex();
-                cols_mutex[i].ReleaseMutex();
             }
             writerRelease();
         }
@@ -131,19 +121,12 @@ namespace SpreadsheetApp
         {
             if (col1 < 0 || col2 < 0 || col1 >= numOfCols || col2 >= numOfCols)
                 throw new Exception("Invalid col");
-            Console.WriteLine("User[{0}]:Start ExchangeCols ({1},{2})", Thread.CurrentThread.ManagedThreadId, col1, col2);
             writerRequest();
             for (int i = 0; i < numOfRows; i++)
             {
-                cols_mutex[col1].WaitOne();
-                cols_mutex[col2].WaitOne();
-                rows_mutex[i].WaitOne();
                 String s = spreadSheet[i, col1];
                 spreadSheet[i, col1] = spreadSheet[i, col2];
                 spreadSheet[i, col2] = s;
-                cols_mutex[col1].ReleaseMutex();
-                cols_mutex[col2].ReleaseMutex();
-                rows_mutex[i].ReleaseMutex();
             }
             writerRelease();
         }
@@ -152,7 +135,6 @@ namespace SpreadsheetApp
         // perform search in specific row
         public int searchInRow(int row, String str)
         {
-            Console.WriteLine("User[{0}]:Start SearchInRow (row:{1},str:{2})", Thread.CurrentThread.ManagedThreadId, row, str);
             if (row < 0 || row >= numOfRows)
                 throw new Exception("Invalid row");
             if (!searcherRequest())
@@ -164,12 +146,12 @@ namespace SpreadsheetApp
                 if (spreadSheet[row, i] == str)
                 {
                     col = i;
-                    rows_mutex[row].ReleaseMutex();
+                    rows_mutex[row].Release();
                     searcherRelease();
                     return col;
                 }
             }
-            rows_mutex[row].ReleaseMutex();
+            rows_mutex[row].Release();
             searcherRelease();
             return -1;
 
@@ -178,7 +160,6 @@ namespace SpreadsheetApp
         // perform search in specific col
         public int searchInCol(int col, String str)
         {
-            Console.WriteLine("User[{0}]:Start SearchInRow (col:{1},str:{2})", Thread.CurrentThread.ManagedThreadId, col, str);
             if (col < 0 || col >= numOfCols)
                 throw new Exception("Invalid col");
             if (!searcherRequest())
@@ -190,12 +171,12 @@ namespace SpreadsheetApp
                 if (spreadSheet[i, col] == str)
                 {
                     row = i;
-                    cols_mutex[col].ReleaseMutex();
+                    cols_mutex[col].Release();
                     searcherRelease();
                     return row;
                 }
             }
-            cols_mutex[col].ReleaseMutex();
+            cols_mutex[col].Release();
             searcherRelease();
             return -1;
         }
@@ -204,7 +185,6 @@ namespace SpreadsheetApp
         //includes col1,col2,row1,row2
         public Tuple<int, int> searchInRange(int col1, int col2, int row1, int row2, String str)
         {
-            Console.WriteLine("User[{0}]:Start SearchInRange (pos1:{1},{2},pos2:{3}{4},str:{5})", Thread.CurrentThread.ManagedThreadId, row1, col1, row2, col2, str);
             if (col1 < 0 || col1 >= numOfCols || col2 < 0 || col2 >= numOfCols || row1 < 0 || row2 < 0 || row1 >= numOfRows || row2 >= numOfRows)
                 throw new Exception("Invalid parameters");
 
@@ -220,18 +200,15 @@ namespace SpreadsheetApp
                 rows_mutex[i].WaitOne();
                 for (int j = col1; j <= col2; j++)
                 {
-                    cols_mutex[j].WaitOne();
                     if (spreadSheet[i, j] == str)
                     {
                         position = new Tuple<int, int>(i, j);
-                        rows_mutex[i].ReleaseMutex();
-                        cols_mutex[j].ReleaseMutex();
+                        rows_mutex[i].Release();
                         searcherRelease();
                         return position;
                     }
-                    cols_mutex[j].ReleaseMutex();
                 }
-                rows_mutex[i].ReleaseMutex();
+                rows_mutex[i].Release();
             }
             searcherRelease();
             return new Tuple<int, int>(-1, -1);
@@ -240,7 +217,6 @@ namespace SpreadsheetApp
         //add a row after row1
         public void addRow(int row1)
         {
-            Console.WriteLine("User[{0}]:Start addRow ({1})", Thread.CurrentThread.ManagedThreadId, row1);
             if (row1 < 0 || row1 >= numOfRows)
                 throw new Exception("Invalid row");
             writerRequest();
@@ -259,11 +235,11 @@ namespace SpreadsheetApp
                     newSpreadSheet[i + 1, j] = spreadSheet[i, j];
                 }
             }
-            rows_mutex = new Mutex[numOfRows + 1];
+            rows_mutex = new Semaphore[numOfRows + 1];
             for (int i = 0; i < numOfRows + 1; i++)
             {
-                rows_mutex[i] = new Mutex();
-                //rows_mutex[i].Release();
+                rows_mutex[i] = new Semaphore(0, 1);
+                rows_mutex[i].Release();
             }
             spreadSheet = newSpreadSheet;
             numOfRows++;
@@ -274,7 +250,6 @@ namespace SpreadsheetApp
         //add a column after col1
         public void addCol(int col1)
         {
-            Console.WriteLine("User[{0}]:Start addCol ({1})", Thread.CurrentThread.ManagedThreadId, col1);
             if (col1 < 0 || col1 >= numOfCols)
                 throw new Exception("Invalid col");
             writerRequest();
@@ -293,10 +268,11 @@ namespace SpreadsheetApp
                     newSpreadSheet[i, j + 1] = spreadSheet[i, j];
                 }
             }
-            cols_mutex = new Mutex[numOfCols + 1];
+            cols_mutex = new Semaphore[numOfCols + 1];
             for (int i = 0; i < numOfCols + 1; i++)
             {
-                cols_mutex[i] = new Mutex();
+                cols_mutex[i] = new Semaphore(0, 1);
+                cols_mutex[i].Release();
             }
             spreadSheet = newSpreadSheet;
             numOfCols++;
@@ -306,7 +282,6 @@ namespace SpreadsheetApp
         // perform search and return all relevant cells according to caseSensitive param
         public Tuple<int, int>[] findAll(String str, bool caseSensitive)
         {
-            Console.WriteLine("User[{0}]:Start findAll ({1},{2})", Thread.CurrentThread.ManagedThreadId, str, caseSensitive);
             if (str == null)
                 throw new Exception("Empty String");
             if (!searcherRequest())
@@ -339,7 +314,7 @@ namespace SpreadsheetApp
                             allStrings.Add(new Tuple<int, int>(i, j));
                     }
                 }
-                rows_mutex[i].ReleaseMutex();
+                rows_mutex[i].Release();
             }
             searcherRelease();
             return allStrings.ToArray();
@@ -349,7 +324,6 @@ namespace SpreadsheetApp
         // replace all oldStr cells with the newStr str according to caseSensitive param
         public void setAll(String oldStr, String newStr, bool caseSensitive)
         {
-            Console.WriteLine("User[{0}]:Start setAll ({1},{2},{3})", Thread.CurrentThread.ManagedThreadId, oldStr, newStr, caseSensitive);
             Tuple<int, int>[] allStrings = findAll(oldStr, caseSensitive);
             if (allStrings == null)
                 return;
@@ -366,7 +340,6 @@ namespace SpreadsheetApp
         // return the size of the spreadsheet in nRows, nCols
         public Tuple<int, int> getSize()
         {
-            Console.WriteLine("User[{0}]:Start getSize ", Thread.CurrentThread.ManagedThreadId);
             readerRequest();
             int nRows = numOfRows;
             int nCols = numOfCols;
@@ -510,7 +483,7 @@ namespace SpreadsheetApp
 
         public string[,] getData()
         {
-            return spreadSheet;
+            return this.spreadSheet;
         }
 
         public void PrintSheet()
@@ -528,7 +501,6 @@ namespace SpreadsheetApp
             }
         }
     }
-
 
 
 }
