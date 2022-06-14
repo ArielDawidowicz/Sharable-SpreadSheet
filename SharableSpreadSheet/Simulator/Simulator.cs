@@ -21,7 +21,6 @@
                 spreadSheet.setCell(i, j, random.Next(9).ToString());
             }
         }
-        spreadSheet.save("saveShit");
         Console.WriteLine("////////////////////START\\\\\\\\\\\\\\\\\\\\\\");
         Thread[] ts = new Thread[int.Parse(args[2])];
         for (int i = 0; i < ts.Length ; i++)
