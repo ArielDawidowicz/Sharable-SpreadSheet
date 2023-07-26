@@ -36,7 +36,7 @@ The possible operations are classified into three groups:
 
 ### Conclusion
 
-The Sharable-SpreadSheet is a robust, thread-safe implementation of a concurrent spreadsheet, allowing multiple users to perform read and write operations simultaneously. The combination of binary semaphores, specific row/column locking, and counter management ensures smooth and efficient operation in a concurrent environment. 
+The Sharable-SpreadSheet is a robust, thread-safe implementation of a concurrent spreadsheet, allowing multiple users to perform read and write operations simultaneously. The combination of binary semaphores, specific row/column locking, and counter management ensures smooth and efficient operation in a concurrent environment.
 
 ![image](https://user-images.githubusercontent.com/101277239/173196578-efd682f6-6034-4dc3-a497-9781eb444b5c.png)
 ![image](https://user-images.githubusercontent.com/101277239/173196587-a8a66f88-d88b-48d3-a293-c2443efa38f3.png)
